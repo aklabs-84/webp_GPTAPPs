@@ -1,0 +1,12 @@
+# Root
+.DS_Store
+
+# UI
+web-ui/node_modules
+web-ui/dist
+web-ui/.env.local
+
+# MCP
+mcp-server/node_modules
+mcp-server/dist
+mcp-server/.env

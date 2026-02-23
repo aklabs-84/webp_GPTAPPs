@@ -1,0 +1,14 @@
+{
+  "name": "webp-chatgpt-app-bundle",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "ui:install": "npm --prefix web-ui install",
+    "ui:dev": "npm --prefix web-ui run dev",
+    "ui:build": "npm --prefix web-ui run build",
+    "mcp:install": "npm --prefix mcp-server install",
+    "mcp:dev": "npm --prefix mcp-server run dev",
+    "mcp:build": "npm --prefix mcp-server run build",
+    "mcp:start": "npm --prefix mcp-server run start"
+  }
+}

@@ -1,0 +1,7 @@
+/* Base styles for Vite build compatibility */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
