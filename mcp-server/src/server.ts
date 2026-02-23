@@ -22,6 +22,7 @@ const publicBaseUrl =
   process.env.RENDER_EXTERNAL_URL ||
   '';
 const publicOrigin = publicBaseUrl ? new URL(publicBaseUrl).origin : null;
+const publicBaseForClient = publicOrigin ?? '';
 
 type TempDownload = {
   buffer: Buffer;
@@ -33,10 +34,22 @@ type TempDownload = {
 const tempDownloads = new Map<string, TempDownload>();
 const TEMP_TTL_MS = 1000 * 60 * 15;
 
+const setCors = (res: express.Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+};
+
+app.options('/download-cache', (_req, res) => {
+  setCors(res);
+  res.status(204).end();
+});
+
 app.post(
   '/download-cache',
   express.raw({ type: 'application/octet-stream', limit: '30mb' }),
   (req, res) => {
+    setCors(res);
     if (!publicBaseUrl) {
       res.status(500).json({ error: 'PUBLIC_BASE_URL is not configured' });
       return;
@@ -200,10 +213,13 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       const warn = document.getElementById('warn');
 
       const fallbackUrl = ${JSON.stringify(fallbackWebUrl ?? '')};
-      const publicBase = ${JSON.stringify(publicBaseUrl || '')};
+      const publicBase = ${JSON.stringify(publicBaseForClient)};
       if (fallbackUrl) {
         fallbackLink.href = fallbackUrl;
         fallbackLink.style.display = 'inline';
+      }
+      if (!publicBase) {
+        warn.textContent = '서버 설정 필요: PUBLIC_BASE_URL 환경변수가 비어 있습니다.';
       }
 
       const items = [];
