@@ -68,6 +68,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       .ok { color: #34d399; font-weight: 700; }
       .err { color: #fca5a5; font-weight: 700; }
       .status { color: #93c5fd; font-weight: 700; }
+      .notice { margin-top: 8px; color: #93c5fd; font-size: 11px; }
       input[type="range"] { width: 100%; }
       @media (max-width: 640px) {
         .title { font-size: 18px; }
@@ -100,6 +101,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
           <button id="clear" class="btn secondary" disabled>목록 비우기</button>
           <a id="fallbackLink" class="small" href="#" target="_blank" rel="noopener noreferrer" style="margin-left:auto; display:none;">전체 웹 버전 열기</a>
         </div>
+        <div class="notice">ChatGPT 위젯 환경에 따라 파일은 새 탭에서 열릴 수 있습니다.</div>
       </div>
 
       <div id="list" class="list"></div>
@@ -124,6 +126,24 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       }
 
       const items = [];
+
+      const triggerDownload = (blob, fileName) => {
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = fileName;
+          a.rel = 'noopener noreferrer';
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch {
+          window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        } finally {
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 20000);
+        }
+      };
 
       const formatBytes = (bytes) => {
         if (!bytes) return '0 B';
@@ -160,12 +180,14 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
             const reduction = Math.max(0, Math.round(((item.originalSize - item.webpSize) / item.originalSize) * 100));
             sizeEl.textContent = 'WebP: ' + formatBytes(item.webpSize);
             statusEl.innerHTML = '<span class="ok">완료 · ' + reduction + '% 절감</span>';
-            const a = document.createElement('a');
-            a.className = 'btn secondary';
-            a.textContent = '다운로드';
-            a.href = item.url;
-            a.download = item.name.replace(/\.[^/.]+$/, '') + '.webp';
-            actions.appendChild(a);
+            const dl = document.createElement('button');
+            dl.className = 'btn secondary';
+            dl.textContent = '다운로드';
+            dl.onclick = () => {
+              if (!item.blob) return;
+              triggerDownload(item.blob, item.name.replace(/\.[^/.]+$/, '') + '.webp');
+            };
+            actions.appendChild(dl);
           } else if (item.status === 'error') {
             sizeEl.textContent = 'WebP: -';
             statusEl.innerHTML = '<span class="err">실패</span>';
@@ -270,12 +292,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
           zip.file(x.name.replace(/\.[^/.]+$/, '') + '.webp', x.blob);
         });
         const content = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(content);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'converted_images_' + Date.now() + '.zip';
-        a.click();
-        URL.revokeObjectURL(url);
+        triggerDownload(content, 'converted_images_' + Date.now() + '.zip');
       });
 
       clearBtn.addEventListener('click', () => {
