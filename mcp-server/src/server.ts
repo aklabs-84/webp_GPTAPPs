@@ -49,8 +49,7 @@ server.registerResource(
       .frame-wrap {
         width: 100%;
         height: 680px;
-        max-height: 80vh;
-        min-height: 520px;
+        min-height: 680px;
       }
       iframe {
         border: 0;
