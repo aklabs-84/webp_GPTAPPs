@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
@@ -16,6 +17,82 @@ app.get('/health', (_req, res) => {
 });
 
 const fallbackWebUrl = process.env.WEB_APP_URL;
+const publicBaseUrl =
+  process.env.PUBLIC_BASE_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  '';
+const publicOrigin = publicBaseUrl ? new URL(publicBaseUrl).origin : null;
+
+type TempDownload = {
+  buffer: Buffer;
+  mime: string;
+  fileName: string;
+  expiresAt: number;
+};
+
+const tempDownloads = new Map<string, TempDownload>();
+const TEMP_TTL_MS = 1000 * 60 * 15;
+
+app.post(
+  '/download-cache',
+  express.raw({ type: 'application/octet-stream', limit: '30mb' }),
+  (req, res) => {
+    if (!publicBaseUrl) {
+      res.status(500).json({ error: 'PUBLIC_BASE_URL is not configured' });
+      return;
+    }
+
+    const fileName = String(req.query.name || 'file.bin');
+    const mime = String(req.query.type || 'application/octet-stream');
+    const body = req.body as Buffer;
+
+    if (!body || !Buffer.isBuffer(body) || body.length === 0) {
+      res.status(400).json({ error: 'empty body' });
+      return;
+    }
+
+    const id = randomUUID();
+    tempDownloads.set(id, {
+      buffer: body,
+      mime,
+      fileName,
+      expiresAt: Date.now() + TEMP_TTL_MS,
+    });
+
+    res.status(200).json({ url: `${publicBaseUrl}/download-cache/${id}` });
+  }
+);
+
+app.get('/download-cache/:id', (req, res) => {
+  const record = tempDownloads.get(req.params.id);
+  if (!record) {
+    res.status(404).send('Not found or expired');
+    return;
+  }
+
+  if (record.expiresAt < Date.now()) {
+    tempDownloads.delete(req.params.id);
+    res.status(410).send('Expired');
+    return;
+  }
+
+  res.setHeader('Content-Type', record.mime);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename=\"${encodeURIComponent(record.fileName)}\"`
+  );
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(record.buffer);
+});
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, record] of tempDownloads.entries()) {
+    if (record.expiresAt < now) {
+      tempDownloads.delete(id);
+    }
+  }
+}, 60_000).unref();
 
 const server = new McpServer({
   name: 'webp-master',
@@ -69,6 +146,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       .err { color: #fca5a5; font-weight: 700; }
       .status { color: #93c5fd; font-weight: 700; }
       .notice { margin-top: 8px; color: #93c5fd; font-size: 11px; }
+      .warn { margin-top: 6px; color: #fca5a5; font-size: 11px; }
       input[type="range"] { width: 100%; }
       @media (max-width: 640px) {
         .title { font-size: 18px; }
@@ -101,7 +179,8 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
           <button id="clear" class="btn secondary" disabled>목록 비우기</button>
           <a id="fallbackLink" class="small" href="#" target="_blank" rel="noopener noreferrer" style="margin-left:auto; display:none;">전체 웹 버전 열기</a>
         </div>
-        <div class="notice">ChatGPT 위젯 환경에 따라 파일은 새 탭에서 열릴 수 있습니다.</div>
+        <div class="notice">다운로드 버튼을 누르면 임시 링크를 생성해 새 탭으로 저장을 시작합니다.</div>
+        <div id="warn" class="warn"></div>
       </div>
 
       <div id="list" class="list"></div>
@@ -118,8 +197,10 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       const zipBtn = document.getElementById('zip');
       const clearBtn = document.getElementById('clear');
       const fallbackLink = document.getElementById('fallbackLink');
+      const warn = document.getElementById('warn');
 
       const fallbackUrl = ${JSON.stringify(fallbackWebUrl ?? '')};
+      const publicBase = ${JSON.stringify(publicBaseUrl || '')};
       if (fallbackUrl) {
         fallbackLink.href = fallbackUrl;
         fallbackLink.style.display = 'inline';
@@ -127,22 +208,26 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
 
       const items = [];
 
-      const triggerDownload = (blob, fileName) => {
-        const objectUrl = URL.createObjectURL(blob);
-        try {
-          const a = document.createElement('a');
-          a.href = objectUrl;
-          a.download = fileName;
-          a.rel = 'noopener noreferrer';
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        } catch {
-          window.open(objectUrl, '_blank', 'noopener,noreferrer');
-        } finally {
-          setTimeout(() => URL.revokeObjectURL(objectUrl), 20000);
+      const uploadAndOpenDownload = async (blob, fileName, mimeType) => {
+        if (!publicBase) {
+          throw new Error('PUBLIC_BASE_URL not configured');
         }
+        const url =
+          publicBase +
+          '/download-cache?name=' +
+          encodeURIComponent(fileName) +
+          '&type=' +
+          encodeURIComponent(mimeType || 'application/octet-stream');
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: blob,
+        });
+        if (!response.ok) throw new Error('upload failed');
+        const data = await response.json();
+        if (!data.url) throw new Error('missing download url');
+        window.open(data.url, '_blank', 'noopener,noreferrer');
       };
 
       const formatBytes = (bytes) => {
@@ -183,9 +268,21 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
             const dl = document.createElement('button');
             dl.className = 'btn secondary';
             dl.textContent = '다운로드';
-            dl.onclick = () => {
+            dl.onclick = async () => {
               if (!item.blob) return;
-              triggerDownload(item.blob, item.name.replace(/\.[^/.]+$/, '') + '.webp');
+              warn.textContent = '';
+              dl.disabled = true;
+              try {
+                await uploadAndOpenDownload(
+                  item.blob,
+                  item.name.replace(/\.[^/.]+$/, '') + '.webp',
+                  'image/webp'
+                );
+              } catch {
+                warn.textContent = '다운로드 링크 생성에 실패했습니다. 잠시 후 다시 시도하세요.';
+              } finally {
+                dl.disabled = false;
+              }
             };
             actions.appendChild(dl);
           } else if (item.status === 'error') {
@@ -285,14 +382,29 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
       });
 
       zipBtn.addEventListener('click', async () => {
+        warn.textContent = '';
+        zipBtn.disabled = true;
         const done = items.filter((x) => x.status === 'done' && x.blob);
-        if (!done.length) return;
+        if (!done.length) {
+          refreshButtons();
+          return;
+        }
         const zip = new JSZip();
         done.forEach((x) => {
           zip.file(x.name.replace(/\.[^/.]+$/, '') + '.webp', x.blob);
         });
-        const content = await zip.generateAsync({ type: 'blob' });
-        triggerDownload(content, 'converted_images_' + Date.now() + '.zip');
+        try {
+          const content = await zip.generateAsync({ type: 'blob' });
+          await uploadAndOpenDownload(
+            content,
+            'converted_images_' + Date.now() + '.zip',
+            'application/zip'
+          );
+        } catch {
+          warn.textContent = 'ZIP 다운로드 링크 생성에 실패했습니다. 잠시 후 다시 시도하세요.';
+        } finally {
+          refreshButtons();
+        }
       });
 
       clearBtn.addEventListener('click', () => {
@@ -311,7 +423,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
         'openai/widgetDescription': '채팅 안에서 이미지를 WebP로 바로 변환하는 위젯',
         'openai/widgetPrefersBorder': true,
         'openai/widgetCSP': {
-          connect_domains: [],
+          connect_domains: publicOrigin ? [publicOrigin] : [],
           resource_domains: ['https://esm.sh'],
         },
       },
