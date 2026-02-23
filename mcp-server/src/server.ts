@@ -19,6 +19,8 @@ const webAppUrl = process.env.WEB_APP_URL;
 if (!webAppUrl) {
   throw new Error('WEB_APP_URL is required. Set it before running the MCP server.');
 }
+const webAppEmbedUrl = new URL(webAppUrl);
+webAppEmbedUrl.searchParams.set('embed', '1');
 const webAppOrigin = new URL(webAppUrl).origin;
 
 const server = new McpServer({
@@ -43,14 +45,25 @@ server.registerResource(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebP Master</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; background: #0a0f1a; }
-      .frame-wrap { height: 100vh; min-height: 560px; width: 100%; }
-      iframe { border: 0; width: 100%; height: 100%; background: #0a0f1a; }
+      html, body { margin: 0; padding: 0; background: #0a0f1a; }
+      .frame-wrap {
+        width: 100%;
+        height: 680px;
+        max-height: 80vh;
+        min-height: 520px;
+      }
+      iframe {
+        border: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #0a0f1a;
+      }
     </style>
   </head>
   <body>
     <div class="frame-wrap">
-      <iframe src="${webAppUrl}" allow="clipboard-write"></iframe>
+      <iframe src="${webAppEmbedUrl.toString()}" allow="clipboard-write"></iframe>
     </div>
   </body>
 </html>`.trim(),
@@ -88,7 +101,7 @@ server.registerTool(
     },
   },
   async ({ quality }) => {
-    const url = new URL(webAppUrl);
+    const url = new URL(webAppEmbedUrl.toString());
     if (quality !== undefined) {
       url.searchParams.set('quality', String(quality));
     }

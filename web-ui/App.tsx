@@ -1,18 +1,25 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Download, Trash2, Settings, Zap, Github, Image as ImageIcon, Info, HelpCircle, ShieldCheck, MousePointerClick, Layers, ChevronRight } from 'lucide-react';
 import JSZip from 'jszip';
 import { v4 as uuidv4 } from 'uuid';
 import { Dropzone } from './components/Dropzone';
 import { ImageCard } from './components/ImageCard';
-import { ConvertedImage, ConversionOptions } from './types';
+import { ConvertedImage } from './types';
 import { convertFileToWebP } from './services/imageService';
 
 const App: React.FC = () => {
+  const params = new URLSearchParams(window.location.search);
+  const isEmbed = params.get('embed') === '1';
+  const initialQuality = Number(params.get('quality'));
+  const normalizedQuality = Number.isFinite(initialQuality)
+    ? Math.min(1, Math.max(0.1, initialQuality))
+    : 0.8;
+
   const [images, setImages] = useState<ConvertedImage[]>([]);
-  const [quality, setQuality] = useState(0.8);
+  const [quality, setQuality] = useState(normalizedQuality);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showGuide, setShowGuide] = useState(true);
+  const [showGuide, setShowGuide] = useState(!isEmbed);
 
   const handleFilesAdded = async (files: File[]) => {
     setIsProcessing(true);
@@ -103,25 +110,28 @@ const App: React.FC = () => {
   const completedCount = images.filter(img => img.status === 'completed').length;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
+    <div className={`${isEmbed ? 'max-w-5xl' : 'max-w-6xl'} mx-auto px-4 ${isEmbed ? 'py-5' : 'py-12'}`}>
       {/* Header */}
-      <header className="mb-8 text-center">
+      <header className={`${isEmbed ? 'mb-5' : 'mb-8'} text-center`}>
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-sm font-semibold mb-4">
           <Zap size={16} /> Client-Side Processing
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">
+        <h1 className={`${isEmbed ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'} font-bold mb-4 bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent`}>
           WebP 마스터
         </h1>
-        <p className="text-xl text-blue-200/80 font-medium mb-6">
+        <p className={`${isEmbed ? 'text-base mb-2' : 'text-xl mb-6'} text-blue-200/80 font-medium`}>
           "서버 업로드 없이 브라우저 내에서 안전하고 빠르게 이미지를 WebP로 변환하는 초경량 도구입니다."
         </p>
-        <p className="text-gray-400 max-w-2xl mx-auto leading-relaxed">
-          웹 사이트 속도를 높이는 가장 효율적인 방법을 경험하세요. 
-          사용자의 모든 데이터는 기기 외부로 유출되지 않습니다.
-        </p>
+        {!isEmbed && (
+          <p className="text-gray-400 max-w-2xl mx-auto leading-relaxed">
+            웹 사이트 속도를 높이는 가장 효율적인 방법을 경험하세요. 
+            사용자의 모든 데이터는 기기 외부로 유출되지 않습니다.
+          </p>
+        )}
       </header>
 
       {/* Intro Guide Section */}
+      {!isEmbed && (
       <section className="mb-12">
         <button 
           onClick={() => setShowGuide(!showGuide)}
@@ -185,15 +195,16 @@ const App: React.FC = () => {
           </div>
         )}
       </section>
+      )}
 
       {/* Main Controls */}
-      <section className="bg-gray-900 border border-gray-800 rounded-3xl p-6 mb-8 shadow-2xl relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-8">
-            <Dropzone onFilesAdded={handleFilesAdded} />
+      <section className={`bg-gray-900 border border-gray-800 rounded-3xl ${isEmbed ? 'p-4 mb-5' : 'p-6 mb-8'} shadow-2xl relative z-10`}>
+        <div className={`grid grid-cols-1 ${isEmbed ? 'lg:grid-cols-1 gap-4' : 'lg:grid-cols-12 gap-8'} items-center`}>
+          <div className={isEmbed ? '' : 'lg:col-span-8'}>
+            <Dropzone onFilesAdded={handleFilesAdded} compact={isEmbed} />
           </div>
           
-          <div className="lg:col-span-4 space-y-6">
+          <div className={`${isEmbed ? '' : 'lg:col-span-4'} space-y-4`}>
             <div className="p-5 bg-gray-950 rounded-2xl border border-gray-800">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -218,13 +229,13 @@ const App: React.FC = () => {
                 <span>고품질</span>
               </div>
               
-              <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+              <p className="text-xs text-gray-500 mt-3 leading-relaxed">
                 * 품질이 높을수록 선명하지만 파일 용량이 커집니다. 
                 <br />* 보통 0.8(80%)이 가장 효율적입니다.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className={`grid ${isEmbed ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-3`}>
               <button 
                 onClick={downloadAll}
                 disabled={completedCount === 0}
@@ -246,14 +257,14 @@ const App: React.FC = () => {
 
       {/* Image Grid */}
       {images.length > 0 && (
-        <section className="mt-12">
+        <section className={`${isEmbed ? 'mt-5' : 'mt-12'}`}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <ImageIcon className="text-blue-500" />
               변환 리스트 ({images.length})
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${isEmbed ? 'lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
             {images.map(image => (
               <ImageCard 
                 key={image.id} 
@@ -267,15 +278,16 @@ const App: React.FC = () => {
 
       {/* Empty State */}
       {images.length === 0 && !isProcessing && (
-        <div className="py-20 flex flex-col items-center justify-center text-gray-600">
+        <div className={`${isEmbed ? 'py-8' : 'py-20'} flex flex-col items-center justify-center text-gray-600`}>
           <div className="p-6 bg-gray-900/50 rounded-full mb-4">
              <ImageIcon size={48} className="opacity-20" />
           </div>
-          <p>리스트가 비어있습니다. 이미지를 추가해보세요!</p>
+          <p className={isEmbed ? 'text-sm' : ''}>리스트가 비어있습니다. 이미지를 추가해보세요!</p>
         </div>
       )}
 
       {/* Footer */}
+      {!isEmbed && (
       <footer className="mt-24 pt-12 border-t border-gray-900">
         {/* AKLABS Promotion Card */}
         <div className="flex justify-center mb-12">
@@ -310,6 +322,7 @@ const App: React.FC = () => {
           <p className="opacity-60">&copy; 2024 WebP Master. All rights reserved. 100% Client-side Processing.</p>
         </div>
       </footer>
+      )}
     </div>
   );
 };
