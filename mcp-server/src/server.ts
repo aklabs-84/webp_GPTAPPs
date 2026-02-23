@@ -442,6 +442,7 @@ server.registerResource('webp_widget', 'ui://webp/widget.html', {}, async () => 
           connect_domains: publicOrigin ? [publicOrigin] : [],
           resource_domains: ['https://esm.sh'],
         },
+        ...(publicOrigin ? { 'openai/widgetDomain': publicOrigin } : {}),
       },
     },
   ],
