@@ -21,64 +21,11 @@ if (!webAppUrl) {
 }
 const webAppEmbedUrl = new URL(webAppUrl);
 webAppEmbedUrl.searchParams.set('embed', '1');
-const webAppOrigin = new URL(webAppUrl).origin;
 
 const server = new McpServer({
   name: 'webp-master',
   version: '0.1.0',
 });
-
-server.registerResource(
-  'webp_widget',
-  'ui://webp/widget.html',
-  {},
-  async () => ({
-    contents: [
-      {
-        uri: 'ui://webp/widget.html',
-        mimeType: 'text/html',
-        text: `
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebP Master</title>
-    <style>
-      html, body { margin: 0; padding: 0; background: #0a0f1a; }
-      .frame-wrap {
-        width: 100%;
-        height: 680px;
-        min-height: 680px;
-      }
-      iframe {
-        border: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-        background: #0a0f1a;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="frame-wrap">
-      <iframe src="${webAppEmbedUrl.toString()}" allow="clipboard-write"></iframe>
-    </div>
-  </body>
-</html>`.trim(),
-        _meta: {
-          'openai/widgetDescription': 'WebP 이미지를 브라우저에서 직접 변환하는 인터페이스',
-          'openai/widgetPrefersBorder': true,
-          'openai/widgetCSP': {
-            connect_domains: [webAppOrigin],
-            resource_domains: [webAppOrigin],
-          },
-          'openai/widgetDomain': webAppOrigin,
-        },
-      },
-    ],
-  })
-);
 
 server.registerTool(
   'open_webp_converter',
@@ -94,9 +41,8 @@ server.registerTool(
         .describe('Initial quality value (0.1 to 1.0).'),
     },
     _meta: {
-      'openai/outputTemplate': 'ui://webp/widget.html',
-      'openai/toolInvocation/invoking': 'WebP 변환기 여는 중...',
-      'openai/toolInvocation/invoked': 'WebP 변환기가 열렸습니다.',
+      'openai/toolInvocation/invoking': 'WebP 변환기 링크 준비 중...',
+      'openai/toolInvocation/invoked': 'WebP 변환기 링크를 준비했습니다.',
     },
   },
   async ({ quality }) => {
@@ -109,7 +55,7 @@ server.registerTool(
       content: [
         {
           type: 'text',
-          text: `WebP 변환기를 열었습니다: ${url.toString()}`,
+          text: `WebP 변환기 링크입니다. 새 탭에서 열어 사용하세요: ${url.toString()}`,
         },
       ],
       structuredContent: {
